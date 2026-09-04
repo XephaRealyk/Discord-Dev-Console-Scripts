@@ -27,7 +27,7 @@ Each script is:
 | Script | Description |
 |--------|-------------|
 | **Quest Automator** | Automatically completes active quests (video, play, stream, activity). Shows live progress in the top‑left corner. |
-| *(more coming soon)* | Additional utility scripts will be added over time. |
+| **Fake Token Generator** | Creates a fake discord user token. |
 
 ---
 
