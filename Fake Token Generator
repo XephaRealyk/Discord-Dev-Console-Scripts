@@ -1,0 +1,16 @@
+/*
+ * Discord Fake Token Generator - Console Script (Large Styled Output)
+ * Generates a random 59-character base64-like token and prints it in huge, bold text.
+ * Run in Discord Dev Console (F12 -> Console). Random every time.
+ */
+
+(function() {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.-_';
+    let token = '';
+    for (let i = 0; i < 59; i++) {
+        token += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    console.log('%c=== FAKE DISCORD TOKEN ===', 'font-size: 24px; font-weight: bold;');
+    console.log('%c' + token, 'font-size: 60px; font-weight: bold; background: #222; color: #0ff; padding: 15px; border-radius: 8px;');
+    console.log('%c--- Copy the token above ---', 'font-size: 18px;');
+})();
