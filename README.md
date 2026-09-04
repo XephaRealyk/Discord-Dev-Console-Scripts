@@ -73,9 +73,7 @@ Every script in this repository is designed with transparency in mind:
 
 ## Contributing
 
-Found a bug? Have an idea for a new script?  
-Open an issue or submit a pull request – all contributions are welcome.
-
+The More you use the more we can release!
 ---
 
 ## License
