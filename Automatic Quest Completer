@@ -1,0 +1,342 @@
+delete window.$;
+let wpRequire = webpackChunkdiscord_app.push([[Symbol()], {}, r => r]);
+webpackChunkdiscord_app.pop();
+
+let ApplicationStreamingStore = Object.values(wpRequire.c).find(x => x?.exports?.A?.__proto__?.getStreamerActiveStreamMetadata).exports.A;
+let RunningGameStore = Object.values(wpRequire.c).find(x => x?.exports?.Ay?.getRunningGames).exports.Ay;
+let QuestsStore = Object.values(wpRequire.c).find(x => x?.exports?.A?.__proto__?.getQuest).exports.A;
+let ChannelStore = Object.values(wpRequire.c).find(x => x?.exports?.A?.__proto__?.getAllThreadsForParent).exports.A;
+let GuildChannelStore = Object.values(wpRequire.c).find(x => x?.exports?.Ay?.getSFWDefaultChannel).exports.Ay;
+let FluxDispatcher = Object.values(wpRequire.c).find(x => x?.exports?.h?.__proto__?.flushWaitQueue).exports.h;
+let api = Object.values(wpRequire.c).find(x => x?.exports?.Bo?.get).exports.Bo;
+
+const supportedTasks = ["WATCH_VIDEO", "PLAY_ON_DESKTOP", "STREAM_ON_DESKTOP", "PLAY_ACTIVITY", "WATCH_VIDEO_ON_MOBILE"];
+let quests = [...QuestsStore.quests.values()].filter(x => x.userStatus?.enrolledAt && !x.userStatus?.completedAt && new Date(x.config.expiresAt).getTime() > Date.now() && supportedTasks.find(y => Object.keys((x.config.taskConfig ?? x.config.taskConfigV2).tasks).includes(y)));
+let isApp = typeof DiscordNative !== "undefined";
+let isStopped = false;
+
+let container = document.createElement('div');
+container.style.position = 'fixed';
+container.style.top = '8px';
+container.style.left = '72px';
+container.style.zIndex = '999999';
+container.style.display = 'flex';
+container.style.alignItems = 'center';
+container.style.gap = '10px';
+container.style.opacity = '0';
+container.style.transition = 'opacity 0.8s ease-in-out';
+container.style.fontFamily = '"gg sans", "Helvetica Neue", Helvetica, Arial, sans-serif';
+container.style.fontSize = '16px';
+container.style.fontWeight = '500';
+container.style.color = '#ffffff';
+container.style.textShadow = 'none';
+container.style.pointerEvents = 'none';
+container.style.userSelect = 'none';
+
+let orb = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+orb.setAttribute('width', '24');
+orb.setAttribute('height', '24');
+orb.setAttribute('viewBox', '0 0 24 24');
+orb.style.marginRight = '4px';
+orb.innerHTML = `
+  <circle cx="12" cy="12" r="10" fill="#5865F2" opacity="0.9"/>
+  <circle cx="12" cy="12" r="6" fill="#ffffff" opacity="0.3"/>
+  <circle cx="12" cy="12" r="3" fill="#ffffff" opacity="0.6"/>
+  <circle cx="8" cy="8" r="1.5" fill="#ffffff" opacity="0.8"/>
+  <circle cx="16" cy="8" r="1.5" fill="#ffffff" opacity="0.8"/>
+  <circle cx="12" cy="16" r="2" fill="#ffffff" opacity="0.5"/>
+`;
+
+let textSpan = document.createElement('span');
+textSpan.style.transition = 'opacity 0.5s ease-in-out';
+textSpan.textContent = '';
+
+container.appendChild(orb);
+container.appendChild(textSpan);
+document.body.appendChild(container);
+
+// --- Console banner ---
+console.log('%c ╔══════════════════════════════════════════╗ ', 'font-size: 20px; font-weight: bold; color: #5865F2;');
+console.log('%c ║       QUEST AUTOMATION ACTIVE           ║ ', 'font-size: 20px; font-weight: bold; color: #5865F2;');
+console.log('%c ║  Progress is displayed in the top-left  ║ ', 'font-size: 20px; font-weight: bold; color: #5865F2;');
+console.log('%c ║  corner of the Discord window.          ║ ', 'font-size: 20px; font-weight: bold; color: #5865F2;');
+console.log('%c ╚══════════════════════════════════════════╝ ', 'font-size: 20px; font-weight: bold; color: #5865F2;');
+console.log('%c ➜ Quest status will update live.          ', 'font-size: 16px; color: #b9bbbe;');
+
+setTimeout(() => {
+  container.style.opacity = '1';
+}, 100);
+
+let styleSheet = document.createElement('style');
+styleSheet.textContent = `
+  @keyframes fadeOutText {
+    0% { opacity: 1; transform: translateY(0); }
+    100% { opacity: 0; transform: translateY(-5px); }
+  }
+`;
+document.head.appendChild(styleSheet);
+
+function setText(text, callback) {
+  textSpan.style.opacity = '0';
+  setTimeout(() => {
+    textSpan.textContent = text;
+    textSpan.style.opacity = '1';
+    if (callback) setTimeout(callback, 500);
+  }, 500);
+}
+
+setText('Quest starting');
+
+if (quests.length === 0) {
+  setTimeout(() => {
+    setText('No active quest found');
+    setTimeout(() => {
+      container.style.animation = 'fadeOutText 0.5s ease-out forwards';
+      setTimeout(() => container.remove(), 500);
+    }, 3000);
+  }, 3000);
+} else {
+  setTimeout(() => {
+    let doQuest = function() {
+      if (isStopped) return;
+      const quest = quests.pop();
+      if (!quest) return;
+
+      const pid = Math.floor(Math.random() * 30000) + 1000;
+      const questName = quest.config.messages.questName;
+      const taskConfig = quest.config.taskConfig ?? quest.config.taskConfigV2;
+      const taskName = supportedTasks.find(x => taskConfig.tasks[x] != null);
+      const taskData = taskConfig.tasks[taskName];
+      const applicationId = quest.config.application?.id ?? taskData.applications?.[0]?.id;
+      const secondsNeeded = taskData.target;
+      let secondsDone = quest.userStatus?.progress?.[taskName]?.value ?? 0;
+
+      setText(questName);
+      
+      setTimeout(() => {
+        setText('Quest Progress - 0/' + secondsNeeded);
+
+        let currentDisplayProgress = 0;
+        let targetProgress = Math.floor(secondsDone);
+        let animationInterval = null;
+
+        function updateDisplayProgress() {
+          if (isStopped) return;
+          if (currentDisplayProgress < targetProgress) {
+            currentDisplayProgress++;
+            let progressText = 'Quest Progress - ' + currentDisplayProgress + '/' + secondsNeeded;
+            if (!textSpan.textContent.includes('Completed')) {
+              textSpan.textContent = progressText;
+            }
+            if (currentDisplayProgress >= targetProgress && animationInterval) {
+              clearInterval(animationInterval);
+              animationInterval = null;
+            }
+          }
+        }
+
+        function setProgress(value) {
+          if (isStopped) return;
+          targetProgress = Math.floor(value);
+          if (!animationInterval && currentDisplayProgress < targetProgress) {
+            animationInterval = setInterval(updateDisplayProgress, 30);
+          }
+          if (targetProgress <= currentDisplayProgress) {
+            if (animationInterval) {
+              clearInterval(animationInterval);
+              animationInterval = null;
+            }
+            currentDisplayProgress = targetProgress;
+            if (!textSpan.textContent.includes('Completed')) {
+              textSpan.textContent = 'Quest Progress - ' + currentDisplayProgress + '/' + secondsNeeded;
+            }
+          }
+        }
+
+        if (taskName === "WATCH_VIDEO" || taskName === "WATCH_VIDEO_ON_MOBILE") {
+          const speed = 7;
+          let completed = false;
+          let fn = async () => {
+            while (true) {
+              if (isStopped) return;
+              const remaining = Math.min(speed, secondsNeeded - secondsDone);
+              await new Promise(resolve => setTimeout(resolve, remaining * 1000));
+              if (isStopped) return;
+              const timestamp = secondsDone + speed;
+              const res = await api.post({ url: '/quests/' + quest.id + '/video-progress', body: { timestamp: Math.min(secondsNeeded, timestamp + Math.random()) } });
+              completed = res.body.completed_at != null;
+              secondsDone = Math.min(secondsNeeded, timestamp);
+              setProgress(secondsDone);
+              if (timestamp >= secondsNeeded) break;
+            }
+            if (!completed && !isStopped) {
+              await api.post({ url: '/quests/' + quest.id + '/video-progress', body: { timestamp: secondsNeeded } });
+            }
+            if (!isStopped) {
+              setProgress(secondsNeeded);
+              if (animationInterval) {
+                clearInterval(animationInterval);
+                animationInterval = null;
+              }
+              currentDisplayProgress = secondsNeeded;
+              setTimeout(() => {
+                textSpan.style.opacity = '0';
+                setTimeout(() => {
+                  textSpan.textContent = 'Quest Completed';
+                  textSpan.style.color = '#57F287';
+                  textSpan.style.opacity = '1';
+                  setTimeout(() => {
+                    container.style.animation = 'fadeOutText 0.8s ease-out forwards';
+                    setTimeout(() => container.remove(), 800);
+                  }, 5000);
+                }, 500);
+              }, 500);
+            }
+          };
+          fn();
+        } else if (taskName === "PLAY_ON_DESKTOP") {
+          if (!isApp) {
+            setText('Desktop app required');
+            setTimeout(() => {
+              container.style.animation = 'fadeOutText 0.5s ease-out forwards';
+              setTimeout(() => container.remove(), 500);
+            }, 3000);
+            return;
+          }
+          api.get({ url: '/applications/public?application_ids=' + applicationId }).then(res => {
+            if (isStopped) return;
+            const appData = res.body[0];
+            const exeName = appData.executables?.find(x => x.os === "win32")?.name?.replace(">", "") ?? appData.name.replace(/[\/\\:*?"<>|]/g, "");
+            const fakeGame = {
+              cmdLine: 'C:\\Program Files\\' + appData.name + '\\' + exeName,
+              exeName: exeName,
+              exePath: 'c:/program files/' + appData.name.toLowerCase() + '/' + exeName,
+              hidden: false,
+              isLauncher: false,
+              id: applicationId,
+              name: appData.name,
+              pid: pid,
+              pidPath: [pid],
+              processName: appData.name,
+              start: Date.now(),
+            };
+            const realGames = RunningGameStore.getRunningGames();
+            const fakeGames = [fakeGame];
+            const realGetRunningGames = RunningGameStore.getRunningGames;
+            const realGetGameForPID = RunningGameStore.getGameForPID;
+            RunningGameStore.getRunningGames = () => fakeGames;
+            RunningGameStore.getGameForPID = (pid) => fakeGames.find(x => x.pid === pid);
+            FluxDispatcher.dispatch({ type: "RUNNING_GAMES_CHANGE", removed: realGames, added: [fakeGame], games: fakeGames });
+
+            let fn = data => {
+              if (isStopped) return;
+              let progress = quest.config.configVersion === 1 ? data.userStatus.streamProgressSeconds : Math.floor(data.userStatus.progress.PLAY_ON_DESKTOP.value);
+              setProgress(progress);
+              if (progress >= secondsNeeded) {
+                if (animationInterval) {
+                  clearInterval(animationInterval);
+                  animationInterval = null;
+                }
+                currentDisplayProgress = secondsNeeded;
+                setTimeout(() => {
+                  textSpan.style.opacity = '0';
+                  setTimeout(() => {
+                    textSpan.textContent = 'Quest Completed';
+                    textSpan.style.color = '#57F287';
+                    textSpan.style.opacity = '1';
+                    setTimeout(() => {
+                      container.style.animation = 'fadeOutText 0.8s ease-out forwards';
+                      setTimeout(() => container.remove(), 800);
+                    }, 5000);
+                  }, 500);
+                }, 500);
+                RunningGameStore.getRunningGames = realGetRunningGames;
+                RunningGameStore.getGameForPID = realGetGameForPID;
+                FluxDispatcher.dispatch({ type: "RUNNING_GAMES_CHANGE", removed: [fakeGame], added: [], games: [] });
+                FluxDispatcher.unsubscribe("QUESTS_SEND_HEARTBEAT_SUCCESS", fn);
+              }
+            };
+            FluxDispatcher.subscribe("QUESTS_SEND_HEARTBEAT_SUCCESS", fn);
+          });
+        } else if (taskName === "STREAM_ON_DESKTOP") {
+          if (!isApp) {
+            setText('Desktop app required');
+            setTimeout(() => {
+              container.style.animation = 'fadeOutText 0.5s ease-out forwards';
+              setTimeout(() => container.remove(), 500);
+            }, 3000);
+            return;
+          }
+          let realFunc = ApplicationStreamingStore.getStreamerActiveStreamMetadata;
+          ApplicationStreamingStore.getStreamerActiveStreamMetadata = () => ({
+            id: applicationId,
+            pid: pid,
+            sourceName: null
+          });
+          let fn = data => {
+            if (isStopped) return;
+            let progress = quest.config.configVersion === 1 ? data.userStatus.streamProgressSeconds : Math.floor(data.userStatus.progress.STREAM_ON_DESKTOP.value);
+            setProgress(progress);
+            if (progress >= secondsNeeded) {
+              if (animationInterval) {
+                clearInterval(animationInterval);
+                animationInterval = null;
+              }
+              currentDisplayProgress = secondsNeeded;
+              setTimeout(() => {
+                textSpan.style.opacity = '0';
+                setTimeout(() => {
+                  textSpan.textContent = 'Quest Completed';
+                  textSpan.style.color = '#57F287';
+                  textSpan.style.opacity = '1';
+                  setTimeout(() => {
+                    container.style.animation = 'fadeOutText 0.8s ease-out forwards';
+                    setTimeout(() => container.remove(), 800);
+                  }, 5000);
+                }, 500);
+              }, 500);
+              ApplicationStreamingStore.getStreamerActiveStreamMetadata = realFunc;
+              FluxDispatcher.unsubscribe("QUESTS_SEND_HEARTBEAT_SUCCESS", fn);
+            }
+          };
+          FluxDispatcher.subscribe("QUESTS_SEND_HEARTBEAT_SUCCESS", fn);
+        } else if (taskName === "PLAY_ACTIVITY") {
+          const channelId = ChannelStore.getSortedPrivateChannels()[0]?.id ?? Object.values(GuildChannelStore.getAllGuilds()).find(x => x != null && x.VOCAL.length > 0).VOCAL[0].channel.id;
+          const streamKey = 'call:' + channelId + ':1';
+          let fn = async () => {
+            while (true) {
+              if (isStopped) return;
+              const res = await api.post({ url: '/quests/' + quest.id + '/heartbeat', body: { stream_key: streamKey, terminal: false } });
+              const progress = res.body.progress.PLAY_ACTIVITY.value;
+              setProgress(progress);
+              await new Promise(resolve => setTimeout(resolve, 20 * 1000));
+              if (progress >= secondsNeeded) {
+                if (animationInterval) {
+                  clearInterval(animationInterval);
+                  animationInterval = null;
+                }
+                currentDisplayProgress = secondsNeeded;
+                await api.post({ url: '/quests/' + quest.id + '/heartbeat', body: { stream_key: streamKey, terminal: true } });
+                setTimeout(() => {
+                  textSpan.style.opacity = '0';
+                  setTimeout(() => {
+                    textSpan.textContent = 'Quest Completed';
+                    textSpan.style.color = '#57F287';
+                    textSpan.style.opacity = '1';
+                    setTimeout(() => {
+                      container.style.animation = 'fadeOutText 0.8s ease-out forwards';
+                      setTimeout(() => container.remove(), 800);
+                    }, 5000);
+                  }, 500);
+                }, 500);
+                break;
+              }
+            }
+          };
+          fn();
+        }
+      }, 1500);
+    };
+    doQuest();
+  }, 3000);
+}
