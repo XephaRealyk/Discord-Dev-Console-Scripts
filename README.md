@@ -1,8 +1,6 @@
-# Discord Quest Automator
+# Discord Dev Console Scripts
 
-### Programmatic completion of active Discord quests via developer console
-
-### Please Use The Discord Quest Code file Above README
+### Full G.I.T Of Codes & Scripts to paste into discord DEV CONSOLE To Modify Your Discord Experience
 
 <p align="center">
   <img src="https://img.shields.io/badge/status-stable-2ea44f?style=for-the-badge">
