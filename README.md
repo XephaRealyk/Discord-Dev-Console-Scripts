@@ -85,5 +85,5 @@ MIT © 2026
 ---
 
 <p align="center">
-  <b>Built with <span style="color:#e25555;">❤</span> by Deepseek & Contributors</b>
+  <b>Code Built By Deepseek & Contributors</b>
 </p>
